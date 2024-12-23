@@ -21,17 +21,27 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
-
+  
+const foodCollection=client.db('food-panda-mysha').collection('yummy-food');
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    app.get('/featured',async(req,res)=>{
+        const result=await foodCollection.find().limit(6).toArray();
+        res.send(result);
+    })
+    app.post('/featured', async(req,res)=>{
+    
+        const result= await foodCollection.find({ isFeatured: true }).limit(6).toArray();
+        res.send(result);
+    })
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 app.get('/',(req,res)=>{
