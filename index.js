@@ -31,12 +31,36 @@ async function run() {
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
     app.get('/featured',async(req,res)=>{
-        const result=await foodCollection.find().limit(6).toArray();
-        res.send(result);
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;// Get the limit query parameter
+    let result;
+
+    if (limit) {
+    
+        result = await foodCollection
+        .find({ foodStatus: "available" }) 
+        .sort({ foodQuantity: -1 }) 
+        .limit(limit)
+        .toArray();
+    } else {
+        // Fetch all items
+        result = await foodCollection.find({ isFeatured: true }).toArray();
+    }
+
+    res.send(result);
     })
     app.post('/featured', async(req,res)=>{
-    
-        const result= await foodCollection.find({ isFeatured: true }).limit(6).toArray();
+        const limit = parseInt(req.query.limit);
+        if (limit) {
+         
+            result = await foodCollection
+            .find({ foodStatus: "available" }) 
+            .sort({ foodQuantity: -1 }) 
+            .limit(limit)
+            .toArray();
+        } else {
+            // Fetch all items
+            result = await foodCollection.find({ isFeatured: true }).toArray();
+        }
         res.send(result);
     })
   } finally {
