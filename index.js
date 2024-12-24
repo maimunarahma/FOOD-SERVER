@@ -39,6 +39,7 @@ async function run() {
       res.send('mysha-panda running');
     });
     const foodCollection = client.db('food-panda-mysha').collection('yummy-food');
+    const requestedFoodCollection= client.db('food-panda-mysha').collection('requested-food');
     // API to fetch featured food items
     app.get('/featured', async (req, res) => {
       try {
@@ -87,34 +88,47 @@ app.post('/featured',async(req,res)=>{
   res.send(result);
 })
 
-  app.get('/update/:id', async(req,res)=>{
-     const id= req.params.id;
-     const query={_id: new ObjectId(id)}
-     const food= await foodCollection.findOne(query)
-     res.send(food);
-
-
+  app.get('/transfer/:id', async(req,res)=>{
+     const id=req.params.id;
+     const query={_id: new ObjectId(id)};
+     const food=await foodCollection.findOne(query);
+  
+     const result=await requestedFoodCollection.insertOne(food);
+     const deleted=await foodCollection.deleteOne(query);
+    res.send({
+      insertedId:result,
+      deletedCount:deleted,
+    })
+  
   })
-  app.put('/update/:id', async(req, res)=>{
-    const id= req.params.id;
-    const food= req.body;
-    console.log('update',food);
-    const filter={_id: new ObjectId(id)}
-    const optionb={upsert:true}
-    const updateFood={
-      $set:{
-        name:food.foodName,
-        image:food.foodImg,
-        price:food.price,
-        quantity: food.foodQuantity,
-      location:food.pickupLocation,
-    expire:food.expireDate,
-  note: food.additionalNotes,
-  status:"available",
+  // app.get('/update/:id', async(req,res)=>{
+  //    const id= req.params.id;
+  //    const query={_id: new ObjectId(id)}
+  //    const food= await foodCollection.findOne(query)
+  //    res.send(food);
 
-     }
-    }
-  })
+
+  // })
+  // app.put('/update/:id', async(req, res)=>{
+  //   const id= req.params.id;
+  //   const food= req.body;
+  //   console.log('update',food);
+  //   const filter={_id: new ObjectId(id)}
+  //   const optionb={upsert:true}
+  //   const updateFood={
+  //     $set:{
+  //       name:food.foodName,
+  //       image:food.foodImg,
+  //       price:food.price,
+  //       quantity: food.foodQuantity,
+  //     location:food.pickupLocation,
+  //   expire:food.expireDate,
+  // note: food.additionalNotes,
+  // status:"available",
+
+  //    }
+  //   }
+  // })
 
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
