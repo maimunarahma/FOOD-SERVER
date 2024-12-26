@@ -5,11 +5,11 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 4000;
-const cookieParser= require('cookie-parser');
+const cookieParser = require('cookie-parser');
 // Middleware
 app.use(cors({
   origin: 'http://localhost:5173',
-  credentials:true
+  credentials: true
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -43,15 +43,15 @@ async function run() {
       res.send('mysha-panda running');
     });
     const foodCollection = client.db('food-panda-mysha').collection('yummy-food');
-    const requestedFoodCollection= client.db('food-panda-mysha').collection('requested-food');
+    const requestedFoodCollection = client.db('food-panda-mysha').collection('requested-food');
     // API to fetch featured food items
     app.get('/featured/:email?', async (req, res) => {
-      const email=req.params.email;
-      let query = {};
+      const email = req.params.email;
+      let query = { status: { $ne: 'deleted' } };
       if (email) {
-        query = { $or: [{ ownerEmail: email }, { ownerEmail: { $exists: false } }] }; 
+        query = { $or: [{ ownerEmail: email }, { ownerEmail: { $exists: false } }] };
       }
-    
+
       try {
         console.log('GET /featured endpoint hit');
         const limit = req.query.limit ? parseInt(req.query.limit) : null;
@@ -60,10 +60,10 @@ async function run() {
 
         const sortBy = req.query.sortBy;
 
-       
+
         let result;
         if (limit) {
-          result = await foodCollection 
+          result = await foodCollection
             .find(query) // Filter by food status
             .sort({ foodQuantity: -1 }) // Sort by food quantity in descending order
             .limit(limit) // Limit the number of results
@@ -82,113 +82,183 @@ async function run() {
         res.status(500).send({ message: "Failed to fetch featured items" });
       }
     });
-app.get('/details/:id', async(req,res)=>{
-   
-  const id=req.params.id;
-  const query={_id: new ObjectId(id)}
-  const food= await foodCollection.findOne(query);
-  res.send(food)
-  
-})
+    app.get('/details/:id', async (req, res) => {
 
-app.post('/featured',async(req,res)=>{
-  const food= req.body;
-  console.log('food',food);
-  const result= await foodCollection.insertOne(food);
-  res.send(result);
-})
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const food = await foodCollection.findOne(query);
+      res.send(food)
 
- app.post('/myrequests/:email', async (req, res) => {
-  const email = req.params.email; // Extract email from route
-  const requestData = req.body;  // Extract data from the request body
-  const { foodId } = requestData; // Assuming `foodId` is passed in the request
-
-  try {
-    // Insert request data into `myrequests` collection
-    const newRequest = {
-      ...requestData,
-      requestedBy: email,
-      timestamp: new Date(),
-    };
-
-    // Perform simultaneous operations
-    const [insertResult, deleteResult] = await Promise.all([
-      requestedFoodCollection.insertOne(newRequest), // Insert into `myrequests`
-      foodCollection.deleteOne({ _id: new ObjectId(foodId) }), // Delete from `foodCollection`
-    ]);
-
-    if (insertResult.insertedId && deleteResult.deletedCount === 1) {
-      res.status(200).send({
-        success: true,
-        message: "Request successfully added and food item removed.",
-        requestId: insertResult.insertedId,
-      });
-    } else {
-      res.status(500).send({
-        success: false,
-        message: "Failed to complete both operations.",
-      });
-    }
-  } catch (error) {
-    console.error("Error in /myrequests:", error);
-    res.status(500).send({
-      success: false,
-      message: "Internal server error.",
-    });
-  }
-});
-
-
-  app.get('/myRequests/:email',async(req,res)=>{
-    const email=req.params.email;
-    const query={requestedBy:email};
-
-    const result=await requestedFoodCollection.find(query).toArray();
-    // console.log('cookie',req.cookie)
-    res.send(result);
-
-  })
-
-  //jwt
-
-  app.post('/jwt', async(req,res)=>{
-    const user=req.body;
-    const token=jwt.sign(user,process.env.JWT_SECRET, {expiresIn:'1h'})
-    res.cookie('token',token,{
-      httpOnly:true,
-      secure:false,
     })
-    res.send({success:true});
-  })
+    app.post('/featured/:email', async (req, res) => {
+      const { email } = req.params; // Extract email from route parameter
+      const { foodName, foodImg, price, foodQuantity, pickupLocation, expireDate, additionalNotes } = req.body;
 
-  // app.get('/update/:id', async(req,res)=>{
-  //    const id= req.params.id;
-  //    const query={_id: new ObjectId(id)}
-  //    const food= await foodCollection.findOne(query)
-  //    res.send(food);
+      if (!email) {
+        return res.status(400).send({ message: 'Email is required' });
+      }
+
+      const food = {
+        foodName,
+        foodImg,
+        price,
+        foodQuantity,
+        pickupLocation,
+        expireDate,
+        additionalNotes,
+        ownerEmail: email, // Assign the dynamic email to the food item
+        status: 'available', // Default status for the food
+        createdAt: new Date(), // Optional: Timestamp of when the food is added
+      };
+
+      try {
+        const result = await foodCollection.insertOne(food);
+        res.status(200).send({
+          success: true,
+          message: 'Food successfully added to the featured list.',
+          food: food,
+          foodId: result.insertedId,
+        });
+      } catch (error) {
+        console.error('Error inserting food:', error);
+        res.status(500).send({
+          success: false,
+          message: 'Failed to add food to the featured list.',
+        });
+      }
+    });
 
 
-  // })
-  // app.put('/update/:id', async(req, res)=>{
-  //   const id= req.params.id;
-  //   const food= req.body;
-  //   console.log('update',food);
-  //   const filter={_id: new ObjectId(id)}
-  //   const optionb={upsert:true}
-  //   const updateFood={
-  //     $set:{
-  //       name:food.foodName,
-  //       image:food.foodImg,
-  //       price:food.price,
-  //       quantity: food.foodQuantity,
-  //     location:food.pickupLocation,
-  //   expire:food.expireDate,
-  // note: food.additionalNotes,
-  // status:"available",
+    app.post('/myrequests/:email', async (req, res) => {
+      const email = req.params.email; // Extract email from route
+      const requestData = req.body;  // Extract data from the request body
+      const { foodId } = requestData; // Assuming `foodId` is passed in the request
 
-  //    }
-  //   }
-  // })
+      try {
+        // Insert request data into `myrequests` collection
+        const newRequest = {
+          ...requestData,
+          requestedBy: email,
+          timestamp: new Date(),
+        };
+
+        // Perform simultaneous operations
+        const [insertResult, deleteResult] = await Promise.all([
+          requestedFoodCollection.insertOne(newRequest), // Insert into `myrequests`
+          foodCollection.deleteOne({ _id: new ObjectId(foodId) }), // Delete from `foodCollection`
+        ]);
+
+        if (insertResult.insertedId && deleteResult.deletedCount === 1) {
+          res.status(200).send({
+            success: true,
+            message: "Request successfully added and food item removed.",
+            requestId: insertResult.insertedId,
+          });
+        } else {
+          res.status(500).send({
+            success: false,
+            message: "Failed to complete both operations.",
+          });
+        }
+      } catch (error) {
+        console.error("Error in /myrequests:", error);
+        res.status(500).send({
+          success: false,
+          message: "Internal server error.",
+        });
+      }
+    });
+
+
+    app.get('/myRequests/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { requestedBy: email };
+
+      const result = await requestedFoodCollection.find(query).toArray();
+      // console.log('cookie',req.cookie)
+      res.send(result);
+
+    })
+
+    //jwt
+
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' })
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false,
+      })
+      res.send({ success: true });
+    })
+
+    app.get('/update/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const food = await foodCollection.findOne(query)
+      res.send(food);
+
+
+    })
+    app.put('/update/:id', async (req, res) => {
+      const id = req.params.id;
+      const food = req.body;
+      console.log('update', food);
+      const filter = { _id: new ObjectId(id) }
+      const options = { upsert: true }
+      const updateFood = {
+        $set: {
+          name: food.foodName,
+          image: food.foodImg,
+          price: food.price,
+          quantity: food.foodQuantity,
+          location: food.pickupLocation,
+          expire: food.expireDate,
+          note: food.additionalNotes,
+          status: "available",
+
+        }
+      }
+      const result = await foodCollection.updateOne(filter, updateFood, options);
+      res.send(result);
+    })
+
+    app.delete('/details/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log('Attempting to delete document with id:', id);
+
+      try {
+        const query = { _id: new ObjectId(id) };
+
+        // Check if the document exists
+        const document = await foodCollection.findOne(query);
+        if (!document) {
+          console.log('No document found with id:', id);
+          return res.status(404).json({ message: 'Document not found' });
+        }
+
+        // Attempt to delete the document
+        const result = await foodCollection.deleteOne(query);
+        if (result.deletedCount === 1) {
+          console.log('Successfully deleted document with id:', id);
+          res.status(200).json({ message: 'Document deleted successfully' });
+        } else {
+          console.log('Failed to delete document with id:', id);
+          res.status(500).json({ message: 'Failed to delete document' });
+        }
+      } catch (error) {
+        console.error('Error deleting document:', error);
+        res.status(500).json({ message: 'An error occurred while deleting the document' });
+      }
+    });
+    app.post('/logout', (req, res) => {
+      res.clearCookie('token', {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'strict'
+      })
+      res.send({ success: true })})
+
 
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
