@@ -45,43 +45,48 @@ async function run() {
     const foodCollection = client.db('food-panda-mysha').collection('yummy-food');
     const requestedFoodCollection = client.db('food-panda-mysha').collection('requested-food');
     // API to fetch featured food items
-    app.get('/featured/:email?', async (req, res) => {
-      const email = req.params.email;
-      let query = { status: { $ne: 'deleted' } };
-      if (email) {
-        query = { $or: [{ ownerEmail: email }, { ownerEmail: { $exists: false } }] };
-      }
-
+    app.get('/featured', async (req, res) => {
       try {
-        console.log('GET /featured endpoint hit');
-        const limit = req.query.limit ? parseInt(req.query.limit) : null;
-        console.log('Limit:', limit);
+          const limit = req.query.limit ? parseInt(req.query.limit) : null;
+          const sortBy = req.query.sortBy;
+          const email = req.body.email ? String(req.body.email) : null;
+    console.log(email)
 
-
-        const sortBy = req.query.sortBy;
-
-
-        let result;
-        if (limit) {
-          result = await foodCollection
-            .find(query) // Filter by food status
-            .sort({ foodQuantity: -1 }) // Sort by food quantity in descending order
-            .limit(limit) // Limit the number of results
-            .toArray();
-        } else {
+          console.log('Limit:', limit, 'Sort By:', sortBy);
+          let query = {}; 
+          if(email) query.email = email; // Define query if needed
           let sortOptions = {};
+  
           if (sortBy === 'expireDate') {
-            sortOptions = { expireDate: 1 }; // Sort by expireDate in descending order
+              sortOptions = { expireDate: 1 }; // Sort by expireDate in ascending order
           }
-          result = await foodCollection.find(query).sort(sortOptions).toArray();
-        }
-        console.log('Result:', result);
-        res.status(200).send(result);
+  
+          let result;
+          if (limit) {
+              result = await foodCollection
+                  .find(query) // Apply filtering if needed
+                  .sort({ foodQuantity: -1 }) // Sort by food quantity (highest first)
+                  .limit(limit)
+                  .toArray();
+          } else {
+              result = await foodCollection.find(query).sort(sortOptions).toArray();
+          }
+  
+          console.log('Result:', result);
+          res.status(200).send(result);
       } catch (error) {
-        console.error("Error in GET /featured:", error);
-        res.status(500).send({ message: "Failed to fetch featured items" });
+          console.error('Error fetching featured food:', error);
+          res.status(500).send({ error: 'Internal Server Error' });
       }
-    });
+  });
+
+  app.get('/featured/:email', async (req, res) => {
+    const email = req.params.email;
+    const query = { ownerEmail: email };
+    const result = await foodCollection.find(query).toArray();
+    res.send(result);
+  })
+  
     app.get('/details/:id', async (req, res) => {
 
       const id = req.params.id;
@@ -92,7 +97,7 @@ async function run() {
     })
     app.post('/featured/:email', async (req, res) => {
       const { email } = req.params; // Extract email from route parameter
-      const { foodName, foodImg, price, foodQuantity, pickupLocation, expireDate, additionalNotes } = req.body;
+      const { foodName, foodImg, price, foodQuantity,rating, pickupLocation, expireDate, additionalNotes } = req.body;
 
       if (!email) {
         return res.status(400).send({ message: 'Email is required' });
@@ -102,6 +107,7 @@ async function run() {
         foodName,
         foodImg,
         price,
+        rating,
         foodQuantity,
         pickupLocation,
         expireDate,
@@ -193,6 +199,7 @@ async function run() {
     })
 
     app.get('/update/:id', async (req, res) => {
+      console.log(food,"update food")
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const food = await foodCollection.findOne(query)
@@ -200,27 +207,27 @@ async function run() {
 
 
     })
-    app.put('/update/:id', async (req, res) => {
+    app.put('/details/:id', async (req, res) => {
       const id = req.params.id;
       const food = req.body;
+      console.log(food)
       console.log('update', food);
       const filter = { _id: new ObjectId(id) }
-      const options = { upsert: true }
+      const options = { upsert:false}
       const updateFood = {
         $set: {
-          name: food.foodName,
-          image: food.foodImg,
-          price: food.price,
-          quantity: food.foodQuantity,
-          location: food.pickupLocation,
-          expire: food.expireDate,
-          note: food.additionalNotes,
-          status: "available",
+       ...food
 
         }
       }
-      const result = await foodCollection.updateOne(filter, updateFood, options);
-      res.send(result);
+      console.log('update', updateFood);
+      const result = await foodCollection.findOneAndUpdate( { _id: new ObjectId(id) }, // Find by ID
+      { $set:{foodName:food.name, foodQuantity:food.quantity, pickupLocation:food.location, expireDate:food.date} },     // Update fields
+      { returnDocument: "after" });
+      if (result) {
+        res.send({ success: true, message: 'Food updated successfully', result });
+    } 
+    
     })
 
     app.delete('/details/:id', async (req, res) => {
